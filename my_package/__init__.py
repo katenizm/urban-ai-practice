@@ -1,15 +1,18 @@
 """
-Python package boilerplate for IDU.
+Irkutsk urban metrics.
 
-This package serves as a boilerplate for developing Python packages
-for Institute of Design and Urban Studies (IDU). It includes basic metadata
-such as versioning, author information, and license details.
+The package stores project metadata. The analysis pipeline lives in
+``notebooks/practice_02.ipynb`` and the dashboard builder in ``dashboard.py``.
 """
 
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, version
 
 
-__version__ = version("my_package")
+try:
+    __version__ = version("my_package")
+except PackageNotFoundError:
+    __version__ = "0.0.0"
+
 __author__ = "Ekaterina Kumanina"
 __email__ = "katenizm@gmail.com"
 __credits__ = []

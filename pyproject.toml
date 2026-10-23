@@ -1,19 +1,20 @@
-[build-system] # информация для сборки проекта в пакет
+[build-system]
 requires = ["setuptools>=64.0", "setuptools_scm[toml]>=8.0"]
 build-backend = "setuptools.build_meta"
 
-[project] # метаданные проекта
-name = "my_package" # название вашего проекта
+[project]
+name = "my_package"
 dynamic = ["version"]
 authors = [
     { name = "Ekaterina Kumanina", email = "katenizm@gmail.com" },
-] # не забудьте поменять на свое имя :)
-description = "IDU research package boilerplate"
+]
+description = "Urban blocks, density, accessibility and school provision metrics for Irkutsk"
 readme = "README.rst"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
+keywords = ["urban planning", "GIS", "OpenStreetMap", "BlocksNet", "Irkutsk"]
 
-dependencies = [ # здесь необходимо вести все устанавливаемые зависимости: пакеты, которые необходимы для адекватной работы вашей библиотеки
+dependencies = [
     "geopandas>=1.0.0,<2.0.0",
     "blocksnet[ipynb,torch]==1.0.0.a9",
     "osmnx>=2.0.0",
@@ -21,14 +22,14 @@ dependencies = [ # здесь необходимо вести все устан�
     "matplotlib>=3.7",
 ]
 
-classifiers = [ # метаданные для описания проекта пользователям, например, на PyPI: какая лицензия, какое предназначение
+classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: BSD License",
     "Operating System :: OS Independent",
     "Intended Audience :: Science/Research",
 ]
 
-[tool.setuptools.packages.find] # что включать в сборку при установке
+[tool.setuptools.packages.find]
 include = ["my_package*"]
 
 [tool.setuptools_scm]
@@ -36,7 +37,7 @@ version_scheme = "post-release"
 local_scheme = "no-local-version"
 
 [project.optional-dependencies]
-dev = [ # зависимости, необходимые для разработки библиотеки, но не для её использования
+dev = [
     "black[jupyter]==22.3",     # Форматирование, включая поддержку Jupyter
     "mapclassify==2.6.1",       # Визуализация данных в Jupyter
     "folium==0.14.0",           # Карты для Jupyter
@@ -51,12 +52,12 @@ dev = [ # зависимости, необходимые для разработ
     "twine",                    # Публикация пакета на PyPI
 ]
 
-tests = [ # зависимости, необходимые для тестирования библиотеки
+tests = [
     "pytest>=7.0.0,<8.0.0",
     "pytest-cov>=4.0.0,<5.0.0",
 ]
 
-docs = [ # зависимости, необходимые для сборки документации
+docs = [
     "docutils>=0.18.0,<1.0.0",
     "sphinx==6.2.1",
     "sphinx-book-theme==1.0.1",
@@ -70,11 +71,7 @@ docs = [ # зависимости, необходимые для сборки д
 ]
 
 
-[project.urls]
-"Repository" = "https://github.com/vasilstar97/python-package-boilerplate"
-"Bug Tracker" = "https://github.com/vasilstar97/python-package-boilerplate/issues"
-
-# всякие истории, связанные с форматированием кода
+# форматирование и линтинг
 [tool.black]
 line-length = 120
 target-version = ['py310']

@@ -1,113 +1,133 @@
-Python package boilerplate (IDU) 
-================================
+Irkutsk Urban Metrics
+=====================
 
-.. logo-start
+Городская аналитика для Иркутска: кварталы, плотность застройки, доступность
+и обеспеченность школами. Расчёты выполнены по данным OpenStreetMap
+библиотекой BlocksNet, результаты сохранены в ``data/`` и собраны в один
+интерактивный ``dashboard.html``.
 
-.. figure:: https://sun9-46.userapi.com/impf/aUFBStH0x_6jN9UhgwrKN1WN4hZ9Y2HMMrXT2w/NuzVobaGlZ0.jpg?size=1590x400&quality=95&crop=0,0,1878,472&sign=9d33baa41a86de35d951d4bbd8011994&type=cover_group
-   :alt: The Institute of Design and Urban Studies
+Проект учебный: это не библиотека общего назначения, а воспроизводимый
+пайплайн и витрина результатов.
 
-.. logo-end
-
-|Documentation Status| |PythonVersion| |Black|
-
-.. readme-start 
-
-Installation
-------------
-
-The library can be installed with ``pip``:
-
-::
-
-   pip install git+https://github.com/vasilstar97/python-package-boilerplate@main
-
-
-How to use
+Что внутри
 ----------
 
-Use the library by importing classes from ``my_package``:
+-  ``notebooks/practice_02.ipynb`` — полный пайплайн: граница, дороги и вода,
+   нарезка кварталов, землепользование, здания и население, школы,
+   обеспеченность, плотность, морфотипы, доступность.
+-  ``dashboard.py`` — сборка ``dashboard.html`` из сохранённых GeoJSON.
+-  ``data/`` — результаты расчётов (в git не входят, занимают около 346 МБ).
+-  ``my_package/`` — метаданные пакета.
+-  ``tests/`` — проверки метаданных пакета.
 
-::
-
-   from my_package.my_module_1 import MyClass
-
-For more detailed use case see our `examples <#examples>`__.
-
-Data
-----
-
-All the required data is stored in `examples
-data folder <./examples/data>`__.
-
-Examples
---------
-
-Next examples will help one to get used to the library:
-
-1. Main `example <./examples/my_example.ipynb>`__ of the library.
-2. ...
-
-Documentation
+Быстрый старт
 -------------
 
-Detailed information and description of the library is available in
-`documentation <https://vasilstar97.github.io/python-package-boilerplate/>`__.
+Нужен Python 3.10+.
 
-Project Structure
------------------
+::
 
-The latest version of the library is available in the ``main`` branch.
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -e '.[tests]'
 
-The repository includes the following directories and modules:
+Если файлы в ``data/`` уже есть, ноутбук для сборки дашборда не нужен:
 
--  `my_package <./my_package>`__
-   directory with the library code:
+::
 
-   -  ...
-   -  ...
+   python dashboard.py
+   python -m http.server 8000
 
--  `tests <./tests>`__
-   ``pytest`` testing
--  `examples <./examples>`__
-   examples of how the library works
--  `docs <./docs>`__
-   documentation sources
+Затем откройте ``http://localhost:8000/dashboard.html``.
 
-Developing
-----------
-
-...
-
-License
+Ноутбук
 -------
 
-The project has `BSD-3-Clause license <./LICENSE>`__
+::
 
-Acknowledgments
----------------
+   jupyter lab notebooks/practice_02.ipynb
 
-...
+Выберите ядро из ``.venv`` и выполняйте ячейки 3–96 по порядку. Все сетевые
+загрузки кэшируются: если файл уже лежит в ``data/``, он читается с диска и
+заново не скачивается. Проверочные ячейки 24, 37, 48, 62, 74, 86 и 95 нельзя
+запускать отдельно — они используют переменные из предыдущих ячеек.
 
-Contacts
+Данные
+------
+
+Основные сохранённые слои:
+
+-  ``blocks.geojson`` — кварталы и доли землепользования;
+-  ``buildings_blocks.geojson`` — здания и оценка населения по кварталам;
+-  ``schools_blocks.geojson`` — школы и вместимость по кварталам;
+-  ``provision.geojson`` — спрос, вместимость и обеспеченность школами;
+-  ``density.geojson`` — FSI, GSI, MXI, этажность, OSR и производные;
+-  ``morphotypes.geojson`` — типы застройки Spacematrix и «Стрелка»;
+-  ``area_accessibility.geojson`` — доступность с учётом площади кварталов;
+-  ``travel_time.geojson`` — среднее время в пути по кварталам;
+-  ``provision_links.csv`` — распределение школьного спроса между кварталами.
+
+Промежуточные кэши — ``graph_walk.pkl`` (пешеходный граф OSM) и
+``accessibility_matrix.csv`` (матрица времени в пути). Они не отображаются
+на дашборде отдельно, но используются при расчётах.
+
+Показатели
+----------
+
+-  землепользование: семь долей функций, преобладающая функция и её доля;
+-  население: оценка BlocksNet по площади и этажности зданий;
+-  школы: число объектов и вместимость, частично оценённая моделью;
+-  обеспеченность: норматив 120 мест на 1000 жителей и доступность 15 минут,
+   ``provision_strong`` и ``provision_weak``;
+-  плотность: ``fsi``, ``gsi``, ``mxi``, ``l``, ``osr``, ``share_living``,
+   ``share_non_living``;
+-  морфотипы: кластеризация Spacematrix и правила «Стрелки»;
+-  доступность: среднее время в пути и средневзвешенное по площади.
+
+Структура проекта
+-----------------
+
+::
+
+   .
+   ├── dashboard.py
+   ├── dashboard.html
+   ├── data/
+   ├── notebooks/
+   │   └── practice_02.ipynb
+   ├── tests/
+   │   └── test_package.py
+   ├── my_package/
+   │   └── __init__.py
+   ├── Makefile
+   ├── pyproject.toml
+   └── README.rst
+
+Проверки
 --------
 
-You can contact me:
+::
 
--  `Vasilii Starikov <https://t.me/vasilstar>`__ - assistant
+   python -m pytest tests
+   python -m pytest tests --cov=my_package
 
-Also, you are welcomed to the `issues <./issues>`__ section!
+Ограничения
+-----------
 
-Publications
-------------
+-  Границы кварталов и землепользование построены по OpenStreetMap и могут
+   отличаться от официальных данных.
+-  Население и вместимость школ — модельные оценки BlocksNet, а не статистика.
+-  Время в пути рассчитано по пешеходному графу OSM и не учитывает расписания
+   транспорта.
+-  Дашборд читает только сохранённые файлы и не повторяет расчёты; подложка
+   карты загружается из OpenStreetMap в браузере.
 
--  `My publication name from scholar or something <https://scholar.google.com/>`__
--  ...
+Лицензия
+--------
 
-.. |Documentation Status| image:: https://github.com/vasilstar97/python-package-boilerplate/actions/workflows/documentation.yml/badge.svg?branch=main
-   :target: https://vasilstar97.github.io/python-package-boilerplate/
-.. |PythonVersion| image:: https://img.shields.io/badge/python-3.10-blue
-   :target: https://pypi.org/project/geopandas/
-.. |Black| image:: https://img.shields.io/badge/code%20style-black-000000.svg
-   :target: https://github.com/psf/black
+BSD-3-Clause. См. `LICENSE <./LICENSE>`__.
 
-.. readme-end
+Автор
+-----
+
+Екатерина Куманина, katenizm@gmail.com.

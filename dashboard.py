@@ -101,6 +101,7 @@ METRIC_INFO = {
     "land_use": "Преобладающая функция территории квартала. Категория определяется по тегам землепользования OpenStreetMap.",
     "population": "Оценка числа жителей квартала по площади и этажности зданий. Единица: человек. Источник: модель BlocksNet.",
     "building_count": "Количество зданий, попавших в границы квартала. Единица: здание. Источник: OpenStreetMap.",
+    "school_count": "Число школьных объектов в квартале. Единица: школа. Источник: OpenStreetMap.",
     "capacity": "Расчётная вместимость школ в квартале. Единица: место. Часть значений оценена моделью BlocksNet.",
     "provision_strong": "Доля потребности в школьных местах, покрытая в пределах нормативной доступности (15 минут). Диапазон: 0–1.",
     "provision_weak": "Доля потребности в школьных местах с учётом объектов до 45 минут пути. Диапазон: 0–1.",
@@ -120,7 +121,7 @@ METRIC_INFO = {
 KPI_INFO_KEYS = {
     "Кварталов": "block_count", "Население (оценка)": "population",
     "Средний FSI": "fsi", "Доступность, мин": "area_accessibility",
-    "Школ": "capacity", "Нехватка мест": "demand_left",
+    "Школ": "school_count", "Нехватка мест": "demand_left",
 }
 
 CHART_INFO_KEYS = {
@@ -136,6 +137,8 @@ CHART_INFO_KEYS = {
 
 
 def bilingual_category(value):
+    if pd.isna(value):
+        return "нет данных"
     raw = str(value)
     translated = CATEGORY_TRANSLATIONS.get(raw.lower())
     return f"{translated} ({raw})" if translated else raw
@@ -274,7 +277,7 @@ for source in (buildings, schools, provision, density, morphotypes, area_acc, tr
         continue
     for col in source.columns:
         if col != "geometry" and col not in map_data.columns:
-            map_data[col] = source[col].values
+            map_data[col] = source[col].reindex(map_data.index)
 map_data["block_id"] = map_data.index + 1
 if "land_use" in map_data.columns:
     map_data["land_use_label"] = map_data["land_use"].map(bilingual_category)
@@ -387,6 +390,7 @@ if all(c in blocks.columns for c in ["residential", "business", "recreation", "i
 if buildings is not None:
     sections.append(stats_section("Здания и население (по кварталам)", {
         "Число зданий (шт.)": buildings["count"],
+        "Жилых зданий (шт.)": buildings["is_living"],
         "Площадь застройки (м²)": buildings["footprint_area"],
         "Сумма этажей (этажей)": buildings["number_of_floors"],
         "Площадь этажей (м²)": buildings["build_floor_area"],
@@ -479,6 +483,54 @@ for col in ("land_use", "spacematrix", "strelka"):
     if col in sample.columns:
         position = sample.columns.get_loc(col) + 1
         sample.insert(position, f"{col} · перевод", sample[col].map(bilingual_category))
+
+# Полный набор квартальных значений для интерактивного реестра на дашборде.
+quarter_table = pd.concat(frames, axis=1)
+quarter_table = quarter_table.loc[:, ~quarter_table.columns.duplicated()].copy()
+quarter_table.insert(0, "Квартал №", quarter_table.index + 1)
+for col in ("land_use", "spacematrix", "strelka"):
+    if col in quarter_table.columns:
+        translated = quarter_table.pop(col).map(bilingual_category)
+        quarter_table.insert(quarter_table.columns.get_loc("Квартал №") + 1, col, translated)
+quarter_table = quarter_table.replace([float("inf"), float("-inf")], pd.NA).round(3).fillna("—")
+quarter_table = quarter_table.rename(columns={
+    "land_use": "Функция квартала",
+    "share": "Доля главной функции",
+    "count": "Число зданий, шт.",
+    "is_living": "Жилых зданий, шт.",
+    "number_of_floors": "Сумма этажей, эт.",
+    "footprint_area": "Площадь застройки, м²",
+    "build_floor_area": "Площадь этажей, м²",
+    "living_area": "Жилая площадь, м²",
+    "non_living_area": "Нежилая площадь, м²",
+    "population": "Население, чел. (оценка)",
+    "capacity": "Вместимость школ, мест",
+    "capacity_estimated": "Вместимость оценена",
+    "capacity_estimated_value": "Оценённая вместимость, мест",
+    "demand": "Спрос на места, мест",
+    "demand_left": "Нехватка мест",
+    "demand_within": "Покрыто в норме, мест",
+    "demand_without": "Покрыто вне нормы, мест",
+    "capacity_left": "Остатки мест",
+    "capacity_within": "Мест отдано в норме",
+    "capacity_without": "Мест отдано вне нормы",
+    "provision_strong": "Обеспеченность strong",
+    "provision_weak": "Обеспеченность weak",
+    "site_area": "Площадь квартала, м²",
+    "fsi": "FSI",
+    "gsi": "GSI",
+    "mxi": "MXI",
+    "l": "Средняя этажность L",
+    "osr": "OSR",
+    "share_living": "Жилая площадь / застройка",
+    "share_non_living": "Нежилая площадь / застройка",
+    "cluster": "Кластер Spacematrix",
+    "spacematrix": "Морфотип Spacematrix",
+    "strelka": "Тип застройки Стрелка",
+    "area_accessibility": "Доступность по площади, мин",
+    "travel_time_mean": "Среднее время пути, мин",
+})
+quarter_table_html = quarter_table.to_html(index=False, border=0, table_id="quarter-table", escape=True)
 
 links_html = ""
 if links is not None and not links.empty:
@@ -622,7 +674,7 @@ for title, caption, src in charts:
         group = "Обеспеченность школами"
     elif "доступность" in title.lower() or "время в пути" in title.lower():
         group = "Застройка и доступность"
-    elif "население" in title.lower() or "число зданий" in title.lower():
+    elif title == "Функции кварталов" or "население" in title.lower() or "число зданий" in title.lower():
         group = "Масштаб города"
     else:
         group = "Застройка и доступность"
@@ -757,6 +809,20 @@ style = """
   .map-toolbar label { font-size:11px; color:var(--muted); font-weight:650; margin:0; }
   .map-toolbar select { grid-column:2; width:100%; max-width:480px; border:1px solid var(--line); border-radius:9px; padding:8px 34px 8px 11px; background:#faf9fb; color:var(--ink); font:inherit; font-size:12px; }
   .map-legend { grid-column:1/-1; justify-self:stretch; font-size:10px; color:var(--muted); display:grid; justify-items:end; gap:4px; }
+  .map-filters { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)) minmax(150px,auto); gap:10px; align-items:end; margin:18px 0 0; padding:13px 15px; border:1px solid var(--line); border-radius:15px; background:#fff; box-shadow:var(--shadow); }
+  .map-filters-heading { grid-column:1/-1; display:flex; justify-content:space-between; align-items:baseline; gap:12px; }
+  .map-filters-heading strong { color:var(--ink); font-size:11px; }
+  .map-filters-heading span { color:var(--muted); font-size:10px; text-align:right; }
+  .map-filter label { display:block; margin:0 0 5px; color:var(--muted); font-size:10px; font-weight:650; }
+  .map-filter select { width:100%; min-width:0; border:1px solid var(--line); border-radius:9px; padding:9px 10px; background:#fafbff; color:var(--ink); font:inherit; font-size:11px; }
+  .filter-count { color:var(--muted); font-size:10px; text-align:right; padding-bottom:7px; white-space:nowrap; }
+  .selection-panel { margin-top:12px; padding:13px 15px; border:1px solid var(--line); border-radius:14px; background:#fff; box-shadow:var(--shadow); min-height:72px; }
+  .selection-title { display:flex; align-items:center; gap:8px; margin:0 0 9px; font-size:12px; font-weight:700; }
+  .selection-title span { font-size:10px; color:var(--muted); font-weight:500; }
+  .selection-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:7px; }
+  .selection-item { padding:7px 9px; border-radius:9px; background:#F7F8FD; min-width:0; }
+  .selection-item small { display:block; color:var(--muted); font-size:9px; margin-bottom:3px; }
+  .selection-item strong { font-size:11px; font-weight:650; overflow-wrap:anywhere; }
   .legend-caption { font-size:10px; color:var(--muted); }
   .legend-scale { display:flex; align-items:center; gap:10px; font-variant-numeric:tabular-nums; }
   .legend-gradient { width:clamp(150px, 22vw, 260px); height:10px; border-radius:10px; background:linear-gradient(90deg,#C0E0FF,#88A2FF,#AB9DFF,#FFB2F7); }
@@ -801,6 +867,11 @@ style = """
   .table-tools input { min-width:190px; flex:1; padding:8px 10px; border:1px solid var(--line); border-radius:8px; color:var(--ink); font:inherit; font-size:11px; background:white; }
   .table-tools button { padding:8px 11px; border:1px solid var(--line); border-radius:8px; background:white; color:var(--ink); font:inherit; font-size:11px; cursor:pointer; }
   .table-tools button:hover { background:#F1F5FF; }
+  #quarter-table-panel .tablewrap { max-height:560px; }
+  #quarter-table-panel .tablewrap table { font-size:10px; }
+  #quarter-table-panel .tablewrap th { cursor:pointer; }
+  #quarter-table-panel tbody tr { cursor:pointer; }
+  #quarter-table-panel tbody tr:hover, #quarter-table-panel tbody tr.is-selected { background:#EEF2FF; }
   th[data-sortable] { cursor:pointer; }
   th[data-sortable]:hover { color:#253A82; }
   th[data-sortable]::after { content:' ↕'; color:#98A4C3; font-size:9px; }
@@ -820,6 +891,8 @@ style = """
     .map-toolbar { grid-template-columns:1fr; align-items:start; }
     .map-toolbar label, .map-toolbar select, .map-legend { grid-column:1; }
     .map-toolbar select { width:100%; max-width:100%; }
+    .map-filters { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .filter-count { grid-column:1/-1; text-align:left; }
     .map-legend { width:100%; justify-items:start; }
     .legend-category-list { justify-content:flex-start; }
     .mapbox .folium-map { height:430px!important; } .grid { grid-template-columns:1fr; }
@@ -830,13 +903,22 @@ style = """
 header_html = """
 <header>
   <div><h1>Иркутск · городская среда</h1><div class="sub">Кварталы и пространственные показатели</div></div>
-  <nav class="topnav"><a href="#overview">Обзор</a><a href="#map-section">Карта</a><a href="#charts">Показатели</a><a href="#tables">Данные</a></nav>
+  <nav class="topnav"><a href="#overview">Обзор</a><a href="#map-section">Карта</a><a href="#charts">Показатели</a><a href="#quarter-register">Кварталы</a><a href="#tables">Данные</a></nav>
 </header>
 """
 
 content_html = f"""<div class="wrap">
   <section class="intro" id="overview"><div><div class="eyebrow">Городская аналитика · BlocksNet</div>
   <h2>Кварталы и метрики города</h2><p>Интерактивный обзор городской структуры, доступности и обеспеченности.</p></div></section>
+
+  <section class="map-filters" aria-label="Фильтры карты">
+    <div class="map-filters-heading"><strong>Фильтры квартальной карты</strong><span>Диаграммы и сводные показатели показывают весь город</span></div>
+    <div class="map-filter"><label for="filter-use">Землепользование</label><select id="filter-use"><option value="">Все функции</option></select></div>
+    <div class="map-filter"><label for="filter-morph">Морфотип</label><select id="filter-morph"><option value="">Все морфотипы</option></select></div>
+    <div class="map-filter"><label for="filter-density">Интенсивность застройки</label><select id="filter-density"><option value="">Любая</option><option value="none">Нет данных</option><option value="low">Низкая · FSI &lt; 0,1</option><option value="medium">Средняя · FSI 0,1–0,5</option><option value="high">Высокая · FSI &gt; 0,5</option></select></div>
+    <div class="map-filter"><label for="filter-population">Население квартала</label><select id="filter-population"><option value="">Любое</option><option value="zero">Нет жителей</option><option value="low">До 100 чел.</option><option value="medium">100–500 чел.</option><option value="high">Более 500 чел.</option></select></div>
+    <div class="filter-count" id="filter-count" aria-live="polite">Кварталы на карте</div>
+  </section>
 
   <div class="map-dashboard-grid">
     <section class="map-primary">
@@ -846,6 +928,10 @@ content_html = f"""<div class="wrap">
         <select id="metric-select">{''.join(f'<option value="{x["field"]}">{x["label"]}</option>' for x in map_options)}</select>
         <div class="map-legend"><span class="legend-caption" id="legend-caption"></span><div class="legend-scale"><span id="legend-min">Низкое</span><span class="legend-gradient"></span><span id="legend-max">Высокое</span></div><div class="legend-category-list" id="legend-categories"></div></div>
       </div><!--MAP--></div>
+      <section class="selection-panel" id="selection-panel" aria-live="polite">
+        <div class="selection-title">Выбранный квартал <span id="selection-hint">Нажмите на квартал на карте или в реестре</span></div>
+        <div class="selection-grid" id="selection-grid"></div>
+      </section>
     </section>
     <section class="map-metrics" aria-label="Ключевые показатели города">
       <h2>Ключевые показатели</h2>
@@ -863,6 +949,11 @@ content_html = f"""<div class="wrap">
   <h2 id="charts">Показатели в распределении</h2>
   <p class="muted">Каждая диаграмма показывает распределение значений по кварталам; редкие экстремальные значения ограничены для читаемости.</p>
   {chart_groups_html}
+
+  <h2 id="quarter-register">Кварталы в выборке</h2>
+  <p class="muted">Выберите строку, чтобы перейти к кварталу на карте. Таблицу можно искать, сортировать и скачать целиком.</p>
+  <details class="data-panel" id="quarter-table-panel"><summary>Реестр кварталов<span>Показать {len(quarter_table):,} строк</span></summary>
+  <div class="tablewrap">{quarter_table_html}</div></details>
 
   <h2>Краткие выводы</h2>
   <div class="note">{conclusions}</div>
@@ -926,6 +1017,18 @@ window.addEventListener('load', () => {{
   const categoryList = document.getElementById('legend-categories');
   const metricLabel = document.querySelector('label[for="metric-select"]');
   const glossary = {json.dumps(METRIC_INFO, ensure_ascii=False)};
+  const categoryTranslations = {json.dumps({str(value): bilingual_category(value) for option in map_options if option["categorical"] for value in option["values"]}, ensure_ascii=False)};
+  const filterUse = document.getElementById('filter-use');
+  const filterMorph = document.getElementById('filter-morph');
+  const filterDensity = document.getElementById('filter-density');
+  const filterPopulation = document.getElementById('filter-population');
+  const filterCount = document.getElementById('filter-count');
+  const selectionHint = document.getElementById('selection-hint');
+  const selectionGrid = document.getElementById('selection-grid');
+  const map = {m.get_name()};
+  const morphOption = options.find(x => x.field === 'spacematrix') || options.find(x => x.field === 'strelka');
+  const morphField = morphOption ? morphOption.field : null;
+  let activeBlock = null;
   const colors = ['#C0E0FF','#88A2FF','#AB9DFF','#FFB2F7','#E3FC87'];
   const categoryColors = ['#88A2FF','#E3FC87','#253A82','#FFB2F7','#C0E0FF','#AB9DFF'];
   function interpolate(t) {{
@@ -933,6 +1036,62 @@ window.addEventListener('load', () => {{
     const a = colors[i].match(/[0-9a-f]{{2}}/gi).map(v => parseInt(v,16));
     const b = colors[Math.min(i+1,colors.length-1)].match(/[0-9a-f]{{2}}/gi).map(v => parseInt(v,16));
     return '#' + a.map((v,j) => Math.round(v+(b[j]-v)*f).toString(16).padStart(2,'0')).join('');
+  }}
+  function matchesFilters(props) {{
+    const useValue = filterUse.value, morphValue = filterMorph.value;
+    const fsi = props.fsi == null || props.fsi === '' ? NaN : Number(props.fsi);
+    const population = props.population == null || props.population === '' ? NaN : Number(props.population);
+    if (useValue && String(props.land_use) !== useValue) return false;
+    if (morphValue && (!morphField || String(props[morphField]) !== morphValue)) return false;
+    if (filterDensity.value === 'none' && Number.isFinite(fsi)) return false;
+    if (filterDensity.value === 'low' && (!Number.isFinite(fsi) || fsi >= .1)) return false;
+    if (filterDensity.value === 'medium' && (!Number.isFinite(fsi) || fsi < .1 || fsi > .5)) return false;
+    if (filterDensity.value === 'high' && (!Number.isFinite(fsi) || fsi <= .5)) return false;
+    if (filterPopulation.value === 'zero' && (!Number.isFinite(population) || population > 0)) return false;
+    if (filterPopulation.value === 'low' && (!Number.isFinite(population) || population <= 0 || population > 100)) return false;
+    if (filterPopulation.value === 'medium' && (!Number.isFinite(population) || population < 100 || population > 500)) return false;
+    if (filterPopulation.value === 'high' && (!Number.isFinite(population) || population <= 500)) return false;
+    return true;
+  }}
+  function addFilterOptions(selectElement, option, firstLabel) {{
+    if (!option) return;
+    option.values.forEach((raw, index) => {{
+      const entry = document.createElement('option'); entry.value = raw;
+      entry.textContent = option.display_values[index] || categoryTranslations[raw] || raw;
+      selectElement.appendChild(entry);
+    }});
+  }}
+  addFilterOptions(filterUse, options.find(x => x.field === 'land_use'), 'Все функции');
+  addFilterOptions(filterMorph, morphOption, 'Все морфотипы');
+  if (!options.some(x => x.field === 'spacematrix' || x.field === 'strelka')) {{
+    filterMorph.disabled = true; filterMorph.innerHTML = '<option value="">Нет данных о морфотипах</option>';
+  }}
+  function showSelection(item, moveToMap) {{
+    activeBlock = item;
+    const props = item.feature.properties || {{}};
+    const displayed = [
+      ['Функция квартала', 'land_use_label'], ['Население, чел. (оценка)', 'population'],
+      ['Зданий, шт.', 'count'], ['FSI', 'fsi'], ['Доступность, мин.', 'area_accessibility'],
+      ['Вместимость школ, мест', 'capacity'], ['Нехватка мест', 'demand_left'],
+      ['Морфотип', morphField]
+    ].filter(([label, key]) => props[key] !== undefined && props[key] !== null && props[key] !== '');
+    selectionHint.textContent = '№' + (props.block_id || '—');
+    selectionGrid.replaceChildren();
+    displayed.forEach(([label, key]) => {{
+      const cell = document.createElement('div'); cell.className = 'selection-item';
+      const small = document.createElement('small'); small.textContent = label;
+      let value = props[key];
+      if (key === 'spacematrix' || key === 'land_use_label') value = categoryTranslations[String(value)] || value;
+      else if (typeof value === 'number') value = value.toLocaleString('ru-RU', {{maximumFractionDigits:2}});
+      const strong = document.createElement('strong'); strong.textContent = value;
+      cell.append(small, strong); selectionGrid.appendChild(cell);
+    }});
+    layer.eachLayer(other => other.setStyle({{weight:other === item ? 2.8 : .65, color:'#253A82'}}));
+    item.setStyle({{weight:3, color:'#142B70', fillOpacity:.98}});
+    document.querySelectorAll('#quarter-table tbody tr').forEach(row => {{
+      row.classList.toggle('is-selected', Number(row.cells[0]?.textContent) === Number(props.block_id));
+    }});
+    if (moveToMap) map.fitBounds(item.getBounds(), {{maxZoom:14, padding:[24,24]}});
   }}
   function paint() {{
     const option = options.find(x => x.field === select.value); if (!option) return;
@@ -961,10 +1120,14 @@ window.addEventListener('load', () => {{
         if (option.categorical) {{ const idx = option.values.indexOf(String(raw)); fill = categoryColors[(idx < 0 ? 0 : idx) % categoryColors.length]; }}
         else {{ const n = Number(raw); if (Number.isFinite(n)) fill = interpolate((n-option.min)/(option.max-option.min || 1)); }}
       }}
-      item.setStyle({{fillColor:fill, color:'#253A82', weight:.65, fillOpacity:.88}});
+      const matches = matchesFilters(props);
+      item.setStyle({{fillColor:fill, color:'#253A82', weight:item === activeBlock ? 2.8 : .65, opacity:matches ? 1 : .12, fillOpacity:matches ? .88 : .035}});
+      const shape = item.getElement(); if (shape) shape.style.pointerEvents = matches ? 'auto' : 'none';
       item.off('mouseover'); item.off('mouseout');
-      item.on('mouseover', () => item.setStyle({{color:'#253A82', weight:2, fillOpacity:.96}}));
-      item.on('mouseout', () => item.setStyle({{fillColor:fill, color:'#253A82', weight:.65, fillOpacity:.88}}));
+      item.off('click');
+      item.on('mouseover', () => {{ if (matches) item.setStyle({{color:'#142B70', weight:item === activeBlock ? 3 : 2, fillOpacity:.96}}); }});
+      item.on('mouseout', () => item.setStyle({{fillColor:fill, color:'#253A82', weight:item === activeBlock ? 2.8 : .65, opacity:matches ? 1 : .12, fillOpacity:matches ? .88 : .035}}));
+      item.on('click', () => showSelection(item, false));
       let value = raw === null || raw === undefined ? 'нет данных' : (typeof raw === 'number' ? raw.toLocaleString('ru-RU',{{maximumFractionDigits:2}}) : String(raw));
       if (option.categorical && raw !== null && raw !== undefined) {{
         const categoryIndex = option.values.indexOf(String(raw));
@@ -972,8 +1135,19 @@ window.addEventListener('load', () => {{
       }}
       item.unbindTooltip(); item.bindTooltip('<b>Квартал №' + (props.block_id || '—') + '</b><br>' + option.label + ': ' + value, {{sticky:true, opacity:.95}});
     }});
+    const total = layer.getLayers().length;
+    const visible = layer.getLayers().filter(item => matchesFilters(item.feature.properties || {{}})).length;
+    filterCount.textContent = 'На карте ' + visible.toLocaleString('ru-RU') + ' из ' + total.toLocaleString('ru-RU') + ' кварталов';
   }}
-  select.addEventListener('change', paint); paint();
+  select.addEventListener('change', paint);
+  [filterUse, filterMorph, filterDensity, filterPopulation].forEach(control => control.addEventListener('change', paint));
+  paint();
+  document.querySelector('#quarter-table tbody')?.addEventListener('click', event => {{
+    const row = event.target.closest('tr'); if (!row) return;
+    const id = Number(row.cells[0]?.textContent); let found = null;
+    layer.eachLayer(item => {{ if (Number(item.feature.properties?.block_id) === id) found = item; }});
+    if (found) showSelection(found, true);
+  }});
   const tooltip = document.createElement('div'); tooltip.className = 'metric-tooltip'; tooltip.setAttribute('role','tooltip');
   const tooltipTitle = document.createElement('strong'), tooltipText = document.createElement('span');
   tooltip.append(tooltipTitle, tooltipText); document.body.appendChild(tooltip);

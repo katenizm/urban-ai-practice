@@ -1,6 +1,8 @@
 SOURCE_DIR = my_package
 TEST_DIR = tests
 
+.PHONY: lint format venv install install-dev install-docs install-tests build clean tests tests-cov
+
 # code formatting and linting
 
 lint:
@@ -21,11 +23,11 @@ install: # простая установка зависимостей без edi
 install-dev: # установка зависимостей для разработки
 	pip install -e '.[dev]'
 
-install-docs: # установка зависимостей для тестирования
+install-docs: # установка зависимостей для сборки документации
 	pip install -e '.[docs]'
 
-install-test: # установка зависимостей для сборки документации
-	pip install -e '.[test]'
+install-tests: # установка зависимостей для тестирования
+	pip install -e '.[tests]'
 
 # building the package
 
@@ -38,7 +40,7 @@ clean:
 # testing
 
 tests: # тестирование
-	pytest ${TEST_DIR}
+	python3 -m pytest ${TEST_DIR}
 
 tests-cov: # тестирование с выводом процента покрытия кода тестами
-	pytest ${TEST_DIR} --cov
+	python3 -m pytest ${TEST_DIR} --cov=${SOURCE_DIR} --cov-report=term-missing
