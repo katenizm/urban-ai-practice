@@ -42,3 +42,18 @@ ENV/
 
 # PyCharm env
 .idea
+
+# macOS
+.DS_Store
+
+# VS Code
+.vscode/
+
+# osmnx cache
+cache/
+
+# большие промежуточные данные (остаются локально, в git не кладём;
+# при повторном запуске скачаются заново)
+data/*_raw.geojson
+data/graph_walk.pkl
+data/accessibility_matrix.csv
